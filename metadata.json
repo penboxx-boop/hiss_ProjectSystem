@@ -1,0 +1,6 @@
+{
+  "name": "專案管理追蹤系統",
+  "description": "具備儀表板、可自訂看板、甘特圖與 AI 專案助理的團隊協作管理平台",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

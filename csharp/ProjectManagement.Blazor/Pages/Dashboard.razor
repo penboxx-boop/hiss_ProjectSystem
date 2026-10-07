@@ -1,0 +1,138 @@
+@page "/dashboard"
+@using ProjectManagement.Core.Models
+@using ProjectManagement.Core.Services
+@inject IProjectManagementService Service
+
+<div class="space-y-6">
+    <!-- 跨專案進度推進大盤 (Portfolio Overview) -->
+    <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-5">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-4">
+            <div>
+                <h2 class="text-base font-extrabold text-slate-800 tracking-tight flex items-center gap-2">
+                    📊 跨專案進度推進大盤 (Portfolio Overview)
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                    宏觀掌握所有專案的健康狀態、推進進度與交付成果，並直接檢視甘特圖時程
+                </p>
+            </div>
+
+            <!-- 全域大盤數據指標 -->
+            <div class="flex items-center gap-2 flex-wrap">
+                <div class="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-center">
+                    <span class="text-[10px] text-slate-400 font-bold block uppercase">專案總數</span>
+                    <span class="text-sm font-black text-slate-800">@PortfolioStats.TotalProjects</span>
+                </div>
+                <div class="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-center">
+                    <span class="text-[10px] text-slate-400 font-bold block uppercase">全域任務</span>
+                    <span class="text-sm font-black text-indigo-600">@PortfolioStats.TotalTasks</span>
+                </div>
+                <div class="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-center">
+                    <span class="text-[10px] text-slate-400 font-bold block uppercase">總體推進率</span>
+                    <span class="text-sm font-black text-emerald-600">@PortfolioStats.AverageProgress%</span>
+                </div>
+                <div class="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-center">
+                    <span class="text-[10px] text-slate-400 font-bold block uppercase">逾期警示</span>
+                    <span class="text-sm font-black text-rose-600">@PortfolioStats.TotalOverdue</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 專案清單卡片 Bento Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            @foreach (var b in PortfolioStats.ProjectBreakdowns)
+            {
+                <div class="p-5 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 hover:shadow-xs transition-all flex flex-col justify-between gap-4">
+                    <div>
+                        <!-- 標題與健康度 -->
+                        <div class="flex justify-between items-start gap-2">
+                            <div>
+                                <h3 class="font-extrabold text-sm text-slate-800">@b.Project.Name</h3>
+                                <p class="text-xs text-slate-500 mt-1 line-clamp-1">@b.Project.Description</p>
+                            </div>
+                            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border @b.HealthColor">
+                                @b.HealthText
+                            </span>
+                        </div>
+
+                        <!-- 達成率進度條 -->
+                        <div class="mt-4">
+                            <div class="flex justify-between items-center text-xs mb-1.5">
+                                <span class="text-[11px] font-bold text-slate-500">專案達成率</span>
+                                <span class="font-mono font-extrabold text-sm text-slate-800">@b.AverageProgress%</span>
+                            </div>
+                            <div class="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                                <div class="h-full bg-indigo-600 rounded-full" style="width: @b.AverageProgress%"></div>
+                            </div>
+                        </div>
+
+                        <!-- 甘特圖時程進度資訊區塊 -->
+                        <div class="mt-3.5 p-3.5 bg-slate-50 border border-slate-200/90 rounded-xl space-y-2.5">
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="font-bold text-slate-800">📅 專案甘特圖時程進度</span>
+                                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border @b.GanttSchedule.StatusBadgeClass">
+                                    @b.GanttSchedule.StatusText
+                                </span>
+                            </div>
+
+                            @if (b.GanttSchedule.HasTasks)
+                            {
+                                <div class="space-y-2">
+                                    <div class="flex justify-between items-center text-xs">
+                                        <span class="font-mono text-slate-600 font-semibold">
+                                            @b.GanttSchedule.EarliestStart.ToString("yyyy-MM-dd") ~ @b.GanttSchedule.LatestEnd.ToString("yyyy-MM-dd")
+                                        </span>
+                                        <span class="font-mono text-[11px] font-bold text-indigo-700 bg-white border border-indigo-150 px-2 py-0.5 rounded-md">
+                                            共 @b.GanttSchedule.TotalSpanDays 天工期
+                                        </span>
+                                    </div>
+
+                                    <!-- 雙軸進度比對條 -->
+                                    <div class="space-y-1">
+                                        <div class="flex justify-between text-[10px] text-slate-500">
+                                            <span>甘特時程推進：@b.GanttSchedule.TimelineProgressPercent%</span>
+                                            <span class="font-bold text-slate-700">工作交付率：@b.AverageProgress%</span>
+                                        </div>
+                                        <div class="relative w-full bg-slate-200 h-2.5 rounded-full overflow-hidden">
+                                            <div class="h-full bg-indigo-200" style="width: @b.GanttSchedule.TimelineProgressPercent%"></div>
+                                            <div class="absolute top-0 bottom-0 left-0 bg-indigo-600 opacity-80" style="width: @b.AverageProgress%"></div>
+                                        </div>
+                                    </div>
+
+                                    @if (b.GanttSchedule.NextMilestoneTask != null)
+                                    {
+                                        <div class="flex items-center justify-between text-[10px] bg-white border border-slate-200 px-2.5 py-1 rounded-lg">
+                                            <span class="text-slate-600 truncate">近期節點: @b.GanttSchedule.NextMilestoneTask.Title</span>
+                                            <span class="font-mono text-indigo-600 font-bold">@b.GanttSchedule.NextMilestoneTask.EndDate.ToString("MM/dd") 止</span>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <!-- 動作按鈕 -->
+                    <div class="flex items-center justify-between pt-3 border-t border-slate-100">
+                        <span class="text-[10px] text-slate-400">@b.AssignedMembers.Count 位團隊成員</span>
+                        <div class="flex items-center gap-2">
+                            <button class="px-3 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl">
+                                內容明細
+                            </button>
+                            <button class="px-3 py-1.5 text-xs font-bold text-indigo-700 bg-white hover:bg-indigo-50 border border-indigo-200 rounded-xl">
+                                📊 甘特圖
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private PortfolioStats PortfolioStats { get; set; } = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        PortfolioStats = await Service.GetPortfolioStatsAsync();
+    }
+}

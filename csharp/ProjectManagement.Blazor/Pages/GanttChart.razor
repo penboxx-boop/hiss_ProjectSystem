@@ -1,0 +1,189 @@
+@using ProjectManagement.Core.Models
+@using ProjectManagement.Core.Services
+@inject IGanttService GanttService
+
+<div class="bg-white border border-slate-200 rounded-2xl shadow-xs p-6 space-y-6 overflow-hidden">
+    
+    <!-- 頂部甘特圖標頭與控制列 -->
+    <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-slate-100 pb-5">
+        <div>
+            <div class="flex items-center gap-2">
+                <h2 class="text-base font-bold text-slate-800 flex items-center gap-1.5">
+                    📊 專案時程分佈 (甘特圖 Gantt)
+                </h2>
+                <span class="text-xs font-semibold px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-md border border-indigo-100">
+                    @(CurrentProject?.Name ?? "未選取專案")
+                </span>
+            </div>
+            <p class="text-xs text-slate-500 mt-1">
+                基準基準日已自動相對應此專案工作項目的排程區間。可縮放視野天數或微調日期以挪移工期。
+            </p>
+        </div>
+
+        <!-- 視圖切換與偏移控制按鈕組 -->
+        <div class="flex flex-wrap items-center gap-2">
+            <!-- 天數視野切換 -->
+            <div class="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
+                <button type="button" @onclick="() => SetSpanDays(24)"
+                        class="px-2.5 py-1 rounded-md font-medium @(SpanDays == 24 ? "bg-white text-indigo-600 shadow-2xs font-bold" : "text-slate-600")">
+                    24 天
+                </button>
+                <button type="button" @onclick="() => SetSpanDays(30)"
+                        class="px-2.5 py-1 rounded-md font-medium @(SpanDays == 30 ? "bg-white text-indigo-600 shadow-2xs font-bold" : "text-slate-600")">
+                    30 天
+                </button>
+            </div>
+
+            <!-- 平移控制 -->
+            <button @onclick="() => ShiftBaseDays(-7)" class="p-1.5 border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-600" title="前移一週">
+                ◀
+            </button>
+            <button @onclick="() => ShiftBaseDays(7)" class="p-1.5 border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-600" title="後移一週">
+                ▶
+            </button>
+
+            <!-- 自動對齊專案起點 -->
+            <button @onclick="ResetToProjectStart" class="px-3 py-1.5 text-xs font-semibold bg-indigo-50 border border-indigo-200 text-indigo-600 rounded-lg hover:bg-indigo-100">
+                🎯 自動對齊專案起點 (@(ScheduleInfo.EarliestStart.ToString("yyyy-MM-dd")))
+            </button>
+
+            <!-- 基準日自訂選取 -->
+            <input type="date" value="@BaseDate.ToString("yyyy-MM-dd")" @onchange="OnBaseDateChanged" 
+                   class="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs font-mono text-slate-700" />
+        </div>
+    </div>
+
+    <!-- 專案排程總覽大盤 Banner -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-3 bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs">
+        <div>
+            <div class="text-[10px] text-slate-400">專案工作排程區間</div>
+            <div class="font-mono font-bold text-slate-700">@ScheduleInfo.EarliestStart ~ @ScheduleInfo.LatestEnd</div>
+        </div>
+        <div>
+            <div class="text-[10px] text-slate-400">工期跨度與進度</div>
+            <div class="font-bold text-slate-700">共 @ScheduleInfo.TotalSpanDays 天 (@Tasks.Count(t => t.Progress == 100)/@Tasks.Count 完成)</div>
+        </div>
+        <div>
+            <div class="text-[10px] text-slate-400">目前甘特圖基準日</div>
+            <div class="font-mono font-bold text-indigo-600">@BaseDate.ToString("yyyy-MM-dd")</div>
+        </div>
+        <div>
+            <div class="text-[10px] text-slate-400">基準對齊狀態</div>
+            <div class="font-medium text-emerald-600 font-bold">
+                @(BaseDate == ScheduleInfo.AutoBaselineDate ? "✓ 已自動對齊專案起點" : "手動微調視野中")
+            </div>
+        </div>
+    </div>
+
+    <!-- 甘特圖主網格表格 -->
+    <div class="border border-slate-200 rounded-2xl overflow-x-auto">
+        <div class="min-w-[950px] divide-y divide-slate-100">
+            <!-- 標頭列：日期天數清單 -->
+            <div class="flex bg-slate-50/70 border-b border-slate-100">
+                <div class="w-72 p-3 font-bold text-xs text-slate-600 shrink-0 border-r border-slate-100">
+                    工作項目名稱及指派人員 (@Tasks.Count 項)
+                </div>
+                <div class="flex-1 flex font-mono text-[10px]">
+                    @foreach (var day in TimelineDays)
+                    {
+                        <div class="flex-1 text-center py-2.5 border-r border-slate-100 last:border-0 font-medium shrink-0 @(day.IsToday ? "bg-indigo-50 font-bold text-indigo-700" : day.IsWeekend ? "bg-amber-50/20 text-amber-700" : "text-slate-600")"
+                             style="min-width: 35px;">
+                            <span class="block text-[9px]">@day.Month/@day.DayOfMonth</span>
+                            <span>@day.DayOfWeekName</span>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- 內容列：任務甘特進度條 -->
+            <div class="divide-y divide-slate-100 bg-white">
+                @foreach (var task in Tasks)
+                {
+                    var pos = GanttService.CalculateTaskPosition(task, BaseDate, SpanDays);
+                    <div class="flex hover:bg-slate-50/50 transition-colors">
+                        <!-- 左側資訊欄 -->
+                        <div class="w-72 p-3 border-r border-slate-100 shrink-0">
+                            <h4 class="font-bold text-xs text-slate-800 line-clamp-1">@task.Title</h4>
+                            <div class="text-[10px] font-mono text-indigo-600 mt-1">
+                                @task.StartDate.ToString("MM/dd") 至 @task.EndDate.ToString("MM/dd") (@task.DurationDays 天)
+                            </div>
+                        </div>
+
+                        <!-- 右側甘特圖長條 -->
+                        <div class="flex-1 relative min-h-16 py-3 shrink-0 flex">
+                            @if (pos.IsVisible)
+                            {
+                                <div class="absolute h-10 top-3 rounded-xl bg-indigo-600 text-white p-2.5 shadow-xs flex flex-col justify-between overflow-hidden"
+                                     style="left: @pos.LeftPercentage%; width: @pos.WidthPercentage%; min-width: 24px;">
+                                    <div class="flex justify-between items-center text-[10px] font-bold">
+                                        <span>@task.Progress%</span>
+                                        <span class="font-normal font-mono truncate">@task.Title</span>
+                                    </div>
+                                    <div class="w-full bg-black/15 h-1 rounded-full overflow-hidden mt-1">
+                                        <div class="h-full bg-white rounded-full" style="width: @task.Progress%"></div>
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="absolute top-4 left-4 text-[10px] text-slate-400 font-mono">
+                                    ⚠️ 任務排程超出目前網格視野 (@task.StartDate ~ @task.EndDate)
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public Project? CurrentProject { get; set; }
+    [Parameter] public List<TaskItem> Tasks { get; set; } = new();
+
+    private DateOnly Today => DateOnly.FromDateTime(DateTime.Today);
+    private int SpanDays { get; set; } = 24;
+    private DateOnly BaseDate { get; set; }
+    private GanttScheduleInfo ScheduleInfo { get; set; } = new();
+    private List<TimelineDay> TimelineDays { get; set; } = new();
+
+    protected override void OnParametersSet()
+    {
+        ScheduleInfo = GanttService.CalculateProjectSchedule(Tasks, Today);
+        BaseDate = ScheduleInfo.AutoBaselineDate;
+        RefreshTimeline();
+    }
+
+    private void SetSpanDays(int days)
+    {
+        SpanDays = days;
+        RefreshTimeline();
+    }
+
+    private void ShiftBaseDays(int offset)
+    {
+        BaseDate = BaseDate.AddDays(offset);
+        RefreshTimeline();
+    }
+
+    private void ResetToProjectStart()
+    {
+        BaseDate = ScheduleInfo.AutoBaselineDate;
+        RefreshTimeline();
+    }
+
+    private void OnBaseDateChanged(ChangeEventArgs e)
+    {
+        if (DateOnly.TryParse(e.Value?.ToString(), out var parsed))
+        {
+            BaseDate = parsed;
+            RefreshTimeline();
+        }
+    }
+
+    private void RefreshTimeline()
+    {
+        TimelineDays = GanttService.GenerateTimelineDays(BaseDate, SpanDays, Today);
+    }
+}
